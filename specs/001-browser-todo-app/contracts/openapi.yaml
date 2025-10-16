@@ -1,0 +1,447 @@
+openapi: 3.0.3
+info:
+  title: Browser-Based ToDo Application API
+  description: |
+    REST API for a browser-based ToDo application with user authentication and task management.
+
+    Features:
+    - User registration and authentication (JWT-based)
+    - Task creation, viewing, and completion
+    - Cross-device task synchronization
+
+  version: 1.0.0
+  contact:
+    name: API Support
+servers:
+  - url: http://localhost:3000/api/v1
+    description: Local development server
+  - url: https://api.todo-app.example.com/api/v1
+    description: Production server
+
+tags:
+  - name: auth
+    description: User authentication operations
+  - name: tasks
+    description: Task management operations
+
+paths:
+  /auth/register:
+    post:
+      tags:
+        - auth
+      summary: Register a new user account
+      description: |
+        Creates a new user account with email and password.
+        Password must be at least 8 characters and contain uppercase, lowercase, and number.
+      operationId: registerUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+            example:
+              email: user@example.com
+              password: SecurePass123
+      responses:
+        '201':
+          description: User successfully registered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+              example:
+                user:
+                  id: 550e8400-e29b-41d4-a716-446655440000
+                  email: user@example.com
+                  createdAt: '2025-10-16T10:00:00.000Z'
+                token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          description: Email already registered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: Email already registered
+                code: EMAIL_EXISTS
+
+  /auth/login:
+    post:
+      tags:
+        - auth
+      summary: Log in to existing account
+      description: Authenticates user and returns JWT token
+      operationId: loginUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+            example:
+              email: user@example.com
+              password: SecurePass123
+      responses:
+        '200':
+          description: Successfully authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+              example:
+                user:
+                  id: 550e8400-e29b-41d4-a716-446655440000
+                  email: user@example.com
+                  createdAt: '2025-10-15T08:30:00.000Z'
+                token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: Invalid email or password
+                code: INVALID_CREDENTIALS
+
+  /auth/me:
+    get:
+      tags:
+        - auth
+      summary: Get current user profile
+      description: Returns the authenticated user's profile information
+      operationId: getCurrentUser
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: User profile retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+              example:
+                id: 550e8400-e29b-41d4-a716-446655440000
+                email: user@example.com
+                createdAt: '2025-10-15T08:30:00.000Z'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /tasks:
+    get:
+      tags:
+        - tasks
+      summary: Get all active tasks for authenticated user
+      description: |
+        Returns all incomplete tasks for the authenticated user.
+        Completed tasks are excluded from results.
+      operationId: getTasks
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: List of active tasks
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tasks:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Task'
+              example:
+                tasks:
+                  - id: 660e8400-e29b-41d4-a716-446655440001
+                    text: Buy groceries
+                    completed: false
+                    createdAt: '2025-10-16T09:00:00.000Z'
+                  - id: 660e8400-e29b-41d4-a716-446655440002
+                    text: Call dentist
+                    completed: false
+                    createdAt: '2025-10-16T08:30:00.000Z'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    post:
+      tags:
+        - tasks
+      summary: Create a new task
+      description: |
+        Creates a new task for the authenticated user.
+        Task text must be 1-200 characters.
+      operationId: createTask
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTaskRequest'
+            example:
+              text: Finish project documentation
+      responses:
+        '201':
+          description: Task successfully created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Task'
+              example:
+                id: 660e8400-e29b-41d4-a716-446655440003
+                text: Finish project documentation
+                completed: false
+                createdAt: '2025-10-16T10:15:00.000Z'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /tasks/{taskId}/complete:
+    post:
+      tags:
+        - tasks
+      summary: Mark a task as completed
+      description: |
+        Marks the specified task as completed and removes it from the active task list.
+        This operation is irreversible - completed tasks cannot be uncompleted.
+      operationId: completeTask
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: taskId
+          in: path
+          required: true
+          description: UUID of the task to complete
+          schema:
+            type: string
+            format: uuid
+          example: 660e8400-e29b-41d4-a716-446655440001
+      responses:
+        '200':
+          description: Task successfully completed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  taskId:
+                    type: string
+                    format: uuid
+              example:
+                message: Task completed successfully
+                taskId: 660e8400-e29b-41d4-a716-446655440001
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: Task not found or already completed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: Task not found
+                code: TASK_NOT_FOUND
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        JWT token obtained from /auth/login or /auth/register.
+        Include in Authorization header: `Authorization: Bearer <token>`
+
+  schemas:
+    User:
+      type: object
+      required:
+        - id
+        - email
+        - createdAt
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Unique user identifier
+        email:
+          type: string
+          format: email
+          maxLength: 255
+          description: User's email address
+        createdAt:
+          type: string
+          format: date-time
+          description: Account creation timestamp
+      example:
+        id: 550e8400-e29b-41d4-a716-446655440000
+        email: user@example.com
+        createdAt: '2025-10-15T08:30:00.000Z'
+
+    Task:
+      type: object
+      required:
+        - id
+        - text
+        - completed
+        - createdAt
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Unique task identifier
+        text:
+          type: string
+          minLength: 1
+          maxLength: 200
+          description: Task description
+        completed:
+          type: boolean
+          description: Task completion status
+        createdAt:
+          type: string
+          format: date-time
+          description: Task creation timestamp
+        completedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Task completion timestamp (null if not completed)
+      example:
+        id: 660e8400-e29b-41d4-a716-446655440001
+        text: Buy groceries
+        completed: false
+        createdAt: '2025-10-16T09:00:00.000Z'
+        completedAt: null
+
+    RegisterRequest:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 255
+          description: User's email address (must be unique)
+        password:
+          type: string
+          minLength: 8
+          maxLength: 100
+          format: password
+          description: |
+            User's password. Must contain:
+            - At least 8 characters
+            - At least 1 uppercase letter
+            - At least 1 lowercase letter
+            - At least 1 number
+      example:
+        email: newuser@example.com
+        password: SecurePass123
+
+    LoginRequest:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+          description: User's email address
+        password:
+          type: string
+          format: password
+          description: User's password
+      example:
+        email: user@example.com
+        password: SecurePass123
+
+    AuthResponse:
+      type: object
+      required:
+        - user
+        - token
+      properties:
+        user:
+          $ref: '#/components/schemas/User'
+        token:
+          type: string
+          description: JWT token for authentication (expires in 7 days)
+      example:
+        user:
+          id: 550e8400-e29b-41d4-a716-446655440000
+          email: user@example.com
+          createdAt: '2025-10-15T08:30:00.000Z'
+        token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+
+    CreateTaskRequest:
+      type: object
+      required:
+        - text
+      properties:
+        text:
+          type: string
+          minLength: 1
+          maxLength: 200
+          description: Task description
+      example:
+        text: Complete project documentation
+
+    Error:
+      type: object
+      required:
+        - error
+        - code
+      properties:
+        error:
+          type: string
+          description: Human-readable error message
+        code:
+          type: string
+          description: Machine-readable error code
+        details:
+          type: object
+          description: Additional error details (optional)
+      example:
+        error: Validation failed
+        code: VALIDATION_ERROR
+        details:
+          field: email
+          message: Invalid email format
+
+  responses:
+    BadRequest:
+      description: Invalid request data
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: Validation failed
+            code: VALIDATION_ERROR
+            details:
+              field: text
+              message: Task text must be between 1 and 200 characters
+
+    Unauthorized:
+      description: Missing or invalid authentication token
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: Authentication required
+            code: UNAUTHORIZED
+
+security: []
